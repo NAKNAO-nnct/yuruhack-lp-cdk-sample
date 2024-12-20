@@ -23,14 +23,23 @@ export class YuruhackCdkStack extends Stack {
     // Public Subnet
     const publicSubnet = vpc.publicSubnets[0];
 
+    // s3://yuruhack-assets へのフル権限を持つ policy
+    const s3Policy = new iam.PolicyStatement({
+      actions: [
+        's3:*',
+      ],
+      resources: ['arn:aws:s3:::yuruhack-assets/*'],
+    });
+
     // IAM Role
     const role = new iam.Role(this, 'yuruhackSampleRole', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
     });
+
     // TODO: S3は最小限の権限を付与する
-    role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonS3FullAccess'));
     role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess'));
     role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonEC2ContainerRegistryReadOnly'));
+    role.addToPolicy(s3Policy);
 
     // User Data for EC2 to install Docker
     const userData = ec2.UserData.forLinux();
@@ -47,6 +56,12 @@ export class YuruhackCdkStack extends Stack {
       'mkdir -p /usr/local/lib/docker/cli-plugins',
       'curl -L "https://github.com/docker/compose/releases/download/v2.16.0/docker-compose-linux-x86_64" -o /usr/local/lib/docker/cli-plugins/docker-compose',
       'chmod +x /usr/local/lib/docker/cli-plugins/docker-compose',
+
+      //
+      'cd /home/ec2-user',
+      'git clone https://github.com/NAKNAO-nnct/yuruhack-lt-app-sample.git',
+      'cd yuruhack-lt-app-sample',
+      'docker compose up -d'
     );
 
     // Security Group for EC2
@@ -54,8 +69,7 @@ export class YuruhackCdkStack extends Stack {
       vpc,
       allowAllOutbound: true,
     });
-    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Allow HTTP access');
-    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'Allow HTTPS access');
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(5000), 'Allow HTTP access');
 
     // EC2 Instance
     const ec2Instance = new ec2.Instance(this, 'Yuruhack_WP_Instance', {
@@ -79,8 +93,8 @@ export class YuruhackCdkStack extends Stack {
     });
 
     // S3 Bucket
-    const bucket = new s3.Bucket(this, 'yuruhack-wp-assets', {
-      bucketName: 'yuruhack-wp-assets',
+    const bucket = new s3.Bucket(this, 'yuruhack-assets', {
+      bucketName: 'yuruhack-assets',
       publicReadAccess: false,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
